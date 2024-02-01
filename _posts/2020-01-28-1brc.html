@@ -1,0 +1,126 @@
+---
+layout: post
+title: "The One Billion row Challenge - A beginner's guide"
+subtitle: "Exploring the solutions in Java, Python and C++"
+date: 2020-01-31 23:45:13 -0400
+background: '/images/1brcf.png'
+permalink: /1brc/
+author: "Kunal Mishra"
+---
+
+<p>The past few days have been so exciting, following the giant  <a href="https://github.com/gunnarmorling/1brc">1 billion row challenge! </a>. The challenge was created by <a href="https://github.com/gunnarmorling">Gunnar Morling</a> and I decided to go through a few solutions that I found really interesting.</p> 
+<p> Each solution will have two timing results: one for the Hetzner AX161 (32-core AMD EPYC™ 7502P, 128 GB RAM) which was the dedicated server for evaluation for the challenge, and another for my experimental local runs on an M2 MacBook Air (8-core, 8GB RAM). </p>
+<h3 class="section-heading"> Dataset and Task</h3>
+
+<p>The dataset consists of 1 billion rows, with each row containing a city name and the temperature, recorded in a file named 'measurements.txt.' The size of the file is approximately 13.8 GB.</p>
+<p>The task is to find minimum, maximum and average value per city sorted alphabetically using optimized code. (see image) </p>
+<div style="text-align: center;">
+    <img src="/images/1brc_data_task.png" alt="Datset and Task" width="500" height="500">
+    <span class="caption text-muted">The Dataset, task and required output</span>
+</div>
+<p>Pretty easy task, huh? Even a freshman can write code to find those values. <b><i>But here's where things get interesting: you have to optimize your code to make the calculations extremely fast.</i></b> As you've seen in the video snippet, the time taken by a few solutions is even faster than the time it takes me to write 'one billion' on a whiteboard.</p>
+    <div style="text-align: center;">
+    <img src="/images/fastest.gif" alt="Fastest Solution" width="500" height="500">
+    <span class="caption text-muted">Fastest Solution</span>
+</div>
+<p>I have tried to understand and explain a few solutions in Java, Python, and C++ in this blog post. The <a href="https://github.com/gunnarmorling/1brc">GitHub repository</a> is a goldmine for people interested in parallel processing, threading, SIMD operations, and, in general, software engineering. A few solutions posted are very specific to the given text file, while most of them are general and can be applied to any dataset. So, without further ado, let's dive into the solutions.
+<h2 class="section-heading" style="color: red;"> 1. Java Solutions</h2>
+<br> </br>
+
+<h3 >1.1 Baseline Solution</h3>
+
+<p>The <a href="https://github.com/gunnarmorling/1brc/blob/main/src/main/java/dev/morling/onebrc/CalculateAverage_baseline.java">baseline solution</a> was posted by the author himself and it's quite easy to understand. This solution utilizes the <a href="https://docs.oracle.com/en/java/javase/17/language/records.html">Record class </a> and <a href="https://docs.oracle.com/javase/8/docs/api/java/util/stream/Collectors.html">Collectors class </a>to aggregate and perform reduction operations on the data. Here's the core idea</p>
+<div style="text-align: center;">
+    <img src="/images/baseline1.png" alt="baseline 1" width="800" height="200">
+    <span class="caption text-muted">Baseline solution</span>
+</div>
+
+<p><b><i>The heart of this solution is the collector.</i></b> The collector has four components supplier, accumulator, combiner and finisher. The main purpose of the collector is to collect a stream of data from each row, calculate the required values, combine results from different threads, and finally convert the accumulation into the desired output format.</p>
+<div style="text-align: center;">
+    <img src="/images/baseline2.png" alt="baseline 2" width="800" height="500">
+    <span class="caption text-muted">Collector class</span>
+</div>
+
+<p>The time taken by the base solution on Dedicated server(Hetzner AX161) and locally (M2 Air) are</p>
+<ul><i>Hetzner AX161 - 4min 49 sec</i></ul>
+<ul><i>M2 Air - 5 min 23 sec</i></ul>
+
+<br> </br>
+
+<h3>1.2 Baseline Solution (optimized) </h3>
+
+<p>The above code ran on a single core. With just two line change we can run the code on mutiple cores and optimize the performance. I found this useful trick in this <a href="https://www.chashnikov.dev/post/one-billion-row-challenge-view-from-sidelines">blog</a> </p>
+<div style="text-align: center;">
+    <img src="/images/java_changes.png" alt="baseline 2" width="1000" height="200">
+    <span class="caption text-muted">Java parallel cores</span>
+</div>
+
+
+<p><b>Time taken</b></p>
+<ul><i>Hetzner AX161 - not available </i></ul>
+<ul><i>M2 Air - 2 min 57 sec</i></ul>
+<br> </br>
+<h3>1.3 Reading file in Chunks </h3>
+
+<p> Another Java <a href="https://github.com/gunnarmorling/1brc/blob/main/src/main/java/dev/morling/onebrc/CalculateAverage_MeanderingProgrammer.java">solution</a> I found interesting was given by <a href="https://github.com/MeanderingProgrammer">Vlad</a>. In this solution the author read file in chunks, which is particularly useful for processing large files. The solution has three major classes <i>ChunkReader,RowReader and Measurement class</i>. </p>
+    <p>The ChunkReader Class read the file using chunck size of 1MB as ByteBuffer object. Then, the RowReader class takes these chunks as input and split it to individual rows containing City names and temperatures. Finally using the measurement class the operations on these rows are performed and results are aggregated in a concurrent map. Here's the snippet of the main method  </p>
+<div style="text-align: center;">
+    <img src="/images/chunking_java.png" alt="baseline 2" width="800" height="500">
+    <span class="caption text-muted">Chunking Solution</span>
+</div>
+<p><b><i>The beauty of this code is that it excels in handling large files by cleverly reading them in manageable chunks, preventing memory overload.</i></b> It employs parallel processing, speeding up data handling and analysis.</p>
+<p><b>Time taken</b></p>
+<ul><i>Hetzner AX161 - 12.5 sec</i></ul>
+<ul><i>M2 Air - 28 sec</i></ul>
+<h2 class="section-heading" style="color: red;"> 2. Python Solutions</h2>
+<br> </br>
+<h3>2.1  Polars and Dask library </h3>
+<p> Now, coming to my favorite language - why is it my favorite? Because there's a library defined for practically everything. In this case, we got lucky, as there are two such libraries that can parallelize the data with just a few lines of code. Here's the snippet of complete <a href="https://github.com/gunnarmorling/1brc/discussions/62">solution</a> using Polars given by <a href="https://github.com/mtaufanr">Taufan</a></p>
+<div style="text-align: center;">
+    <img src="/images/python_polars.png" alt="baseline 2" width="800" height="500">
+    <span class="caption text-muted">Python Polars Library Solution</span>
+</div>
+<p> Yes, that's it. That's the complete code. The code is very easy to understand. In the first step we create a dataframe from measurements.txt and then just run a dataframe operation to aggregate and sort the results. All the parallelization is done internally without any additional configuration. We can do the similar thing using Dask library, here's the <a href="https://github.com/gunnarmorling/1brc/discussions/450">Dask solution</a> given by <a href="https://github.com/scharlottej13">Sara</a> </p>
+<p><b>Time taken</b></p>
+<ul><i>Hetzner AX161 - 9.19 sec</i></ul>
+<ul><i>M2 Air - 43.6 sec</i></ul>
+<br> </br>
+<h3>2.2  Multiprocessing and chunking </h3>
+<p> There has to be some code where you can tune the parameters and understand the implementation details in Python. I found one such <a href="https://github.com/ifnesi/1brc/blob/main/calculateAverage.py">solution</a> from <a href="https://github.com/ifnesi">Italo Nesi</a>. In Python concurrency and parallel programming is implmented using Multiprocessing library. The solution has methods such as get_file_chunks, process_file and process_chunk.</p>
+ <p>In get_file_chunks method we define the path of file , find out number of logical cores using cpu_count(),and then find the chunk size which is defined as total_file_size/number_of_cores. The chunk size came out to be 1.7 GB. Here's the snippet</p>
+<div style="text-align: center;">
+    <img src="/images/python_chunks.png" alt="baseline 2" width="900" height="500">
+    <span class="caption text-muted">Python Chunking</span>
+</div>
+<p> Now we pass the processed chuncks to process_chuck method which will read each chunk line by line parallely and find the min, max and average of values. Finally we combine results from all the chunks and then sort them according to the given output. </p>
+<div style="text-align: center;">
+    <img src="/images/python_process_file.png" alt="baseline 2" width="800" height="500">
+    <span class="caption text-muted">Python Chunking</span>
+</div>
+<p><b>Time taken</b></p>
+<ul><i>Hetzner AX161 - 45 sec</i></ul>
+<ul><i>M2 Air - 1 min 40 sec</i></ul>
+<h2 class="section-heading" style="color: red;"> 3. C/C++ Solutions</h2>
+<p> There's a reason why you should save dessert for last. The OG language, unmatched in its capabilities when it comes to optimization and memory efficiency. The time taken to perform the given tasks on 1 billion rows is merely 0.28 seconds. Just for the time reference , blinking an eye takes about 0.3 seconds.</p>
+<div style="text-align: center;">
+    <img src="/images/kw.gif" alt="baseline 2" width="300" height="300">
+    <span class="caption text-muted">Blinking</span>
+</div>
+<p> I was blown away when I saw the solution. I am still in process to understand it completely. However the <a href="https://github.com/lehuyduc">author</a> has used the following main ideas to make it extremely fast <a href="https://github.com/gunnarmorling/1brc/discussions/138">solution</a></p>
+<ul>
+    <li>Unsigned int overflow hashing: cheapest hash method possible.</li>
+    <li>SIMD to find multiple separator ';' and loop through them.</li>
+    <li>SIMD hashing.</li>
+    <li>SIMD for string comparison in hash table probing.</li>
+    <li>ILP trick (each thread process 2 different lines at a time).</li>
+    <li>Parse number as int instead of float.</li>
+    <li>Use mmap for fast file reading.</li>
+    <li>Use multithreading for both parsing the file, and aggregating the data.</li>
+</ul>
+<p><b>Time taken</b></p>
+<ul><i>Hetzner AX161 - 0.28 sec</i></ul>
+
+<h2 class="section-heading"> Conclusion and Learnings</h2>
+<p> In this blog, we have discussed only a few solutions. According to the competition's rules, the solution had to be implemented in Java, and the leaderboard features only Java solutions. Most of these solutions delve deeply into threading and concurrency. However, there are also solutions in Go, SQL, Snowflake, Rust, Erlang, Fortran, and even Cobol. You can find all the discussions <a href="https://github.com/gunnarmorling/1brc/discussions">here.</a></p>
+<p>I want to reiterate that the challenge is a goldmine for developers of all levels. Whether you're a Data Engineer or a Senior Software Developer, it's crucial to find ways to load and preprocess data as quickly as possible. 
+<p>Thank you for reading. Feel free to drop an <a href="mailto:kunalmishra78@gmail.com">email</a> or ping me on <a href="https://www.linkedin.com/in/kunalmishra1/">LinkedIn</a> if you want to discuss new solutions or have any reviews about the blog.</p>
